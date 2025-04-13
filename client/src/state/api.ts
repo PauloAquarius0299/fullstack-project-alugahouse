@@ -1,6 +1,6 @@
 import { FiltersState } from './index';
 import { cleanParams, createNewUserInDatabase, withToast } from "@/lib/utils";
-import { Application, Manager, Property, Tenant } from "@/types/prismaTypes";
+import { Application, Lease, Manager, Payment, Property, Tenant } from "@/types/prismaTypes";
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { fetchAuthSession, getCurrentUser } from "aws-amplify/auth";
 
@@ -27,7 +27,7 @@ export const api = createApi({
     },
   }),
   reducerPath: "api",
-  tagTypes: ["Properties", "Tenants", "Managers"],
+  tagTypes: ["Properties", "Tenants", "Managers", "PropertyDetails", "Leases", "Payments"],
   endpoints: (build) => ({
     // ==================== User Endpoints ====================
     getAuthUser: build.query<User, void>({
@@ -104,6 +104,22 @@ export const api = createApi({
       },
     }),
 
+    getCurrentResidences: build.query<Property[], string>({
+      query: (cognitoId) => `tenants/${cognitoId}/current-residences`,
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map(({ id }) => ({ type: "Properties" as const, id })),
+              { type: "Properties", id: "LIST" },
+            ]
+          : [{ type: "Properties", id: "LIST" }],
+      async onQueryStarted(_, { queryFulfilled }) {
+        await withToast(queryFulfilled, {
+          error: "Failed to fetch current residences.",
+        });
+      },
+    }),
+
     // ==================== Property Endpoints ====================
     getProperties: build.query<Property[], PropertyQueryParams>({
       query: (filters) => {
@@ -163,6 +179,21 @@ export const api = createApi({
         });
       },
     }),
+        getManagerProperties: build.query<Property[], string>({
+          query: (cognitoId) => `managers/${cognitoId}/properties`,
+          providesTags: (result) =>
+            result
+              ? [
+                  ...result.map(({ id }) => ({ type: "Properties" as const, id })),
+                  { type: "Properties", id: "LIST" },
+                ]
+              : [{ type: "Properties", id: "LIST" }],
+          async onQueryStarted(_, { queryFulfilled }) {
+            await withToast(queryFulfilled, {
+              error: "Failed to load manager profile.",
+            });
+          },
+        }),
 
     // ==================== Favorite Endpoints ====================
     addFavoriteProperty: build.mutation<Tenant, { cognitoId: string; propertyId: number }>({
@@ -199,20 +230,90 @@ export const api = createApi({
       },
     }),
 
-    createApplication: build.mutation<Application, Partial<Application>>({
-      query: (body) => ({
-        url: `applications`,
+     // application related endpoints
+     getApplications: build.query<
+     Application[],
+     { userId?: string; userType?: string }
+   >({
+     query: (params) => {
+       const queryParams = new URLSearchParams();
+       if (params.userId) {
+         queryParams.append("userId", params.userId.toString());
+       }
+       if (params.userType) {
+         queryParams.append("userType", params.userType);
+       }
+
+       return `applications?${queryParams.toString()}`;
+     },
+     providesTags: ["Applications"],
+     async onQueryStarted(_, { queryFulfilled }) {
+       await withToast(queryFulfilled, {
+         error: "Failed to fetch applications.",
+       });
+     },
+   }),
+
+    updateApplicationStatus: build.mutation<
+    Application & { lease?: Lease },
+    { id: number; status: string }
+  >({
+    query: ({ id, status }) => ({
+      url: `applications/${id}/status`,
+      method: "PUT",
+      body: { status },
+    }),
+    invalidatesTags: ["Applications", "Leases"],
+    async onQueryStarted(_, { queryFulfilled }) {
+      await withToast(queryFulfilled, {
+        success: "Application status updated successfully!",
+        error: "Failed to update application settings.",
+      });
+    },
+  }),
+
+  createApplication: build.mutation<Application, Partial<Application>>({
+    query: (body) => ({
+      url: `applications`,
+      method: "POST",
+      body: body,
+    }),
+    invalidatesTags: ["Applications"],
+    async onQueryStarted(_, { queryFulfilled }) {
+      await withToast(queryFulfilled, {
+        success: "Application created successfully!",
+        error: "Failed to create applications.",
+      });
+    },
+  }),
+    createProperty: build.mutation<Property, FormData>({
+      query: (newProperty) => ({
+        url: `properties`,
         method: "POST",
-        body: body,
+        body: newProperty,
       }),
-      invalidatesTags: ["Applications"],
+      invalidatesTags: (result) => [
+        { type: "Properties", id: "LIST" },
+        { type: "Managers", id: result?.manager?.id },
+      ],
       async onQueryStarted(_, { queryFulfilled }) {
         await withToast(queryFulfilled, {
-          success: "Application created successfully!",
-          error: "Failed to create applications.",
+          success: "Property created successfully!",
+          error: "Failed to create property.",
         });
       },
     }),
+
+    getLeases: build.query<Lease[], number>({
+      query: () => "leases",
+      providesTags: ["Leases"],
+    }),
+
+    getPayments: build.query<Payment[], number>({
+      query: (leaseId) => `leases/${leaseId}/payments`,
+      providesTags: ["Payments"],
+    }),
+
   }),
 });
 
@@ -223,8 +324,15 @@ export const {
   useUpdateManagerSettingsMutation,
   useGetPropertiesQuery,
   useGetPropertyQuery,
+  useGetManagerPropertiesQuery,
   useAddFavoritePropertyMutation,
   useRemoveFavoritePropertyMutation,
   useGetTenantQuery,
+  useGetCurrentResidencesQuery,
+  useGetLeasesQuery,
+  useGetPaymentsQuery,
+  useCreatePropertyMutation,
+  useGetApplicationsQuery,
+  useUpdateApplicationStatusMutation,
   useCreateApplicationMutation,
 } = api;

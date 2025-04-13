@@ -29,7 +29,7 @@ app.use("/applications", applicationRoutes);
 app.use("/properties", propertiesRoutes);
 app.use("/leases", leaseRoutes);
 app.use('/tenants', authMiddleware(['tenant']), tenantRoutes);
-app.use('/managers', authMiddleware(['manager']), managerRoutes);
+app.use("/managers", authMiddleware(["manager"]), managerRoutes);
 
 const port = process.env.PORT || 3001;
 app.listen(port, () => {
