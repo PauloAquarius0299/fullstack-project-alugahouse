@@ -42,7 +42,9 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
         <Navbar />
         <div style={{ marginTop: `${NAVBAR_HEIGHT}px` }}>
           <main className="flex">
-            <Sidebar userType={authUser.userRole.toLowerCase()} />
+            {["manager", "tenant"].includes(authUser.userRole.toLowerCase()) && (
+              <Sidebar userType={authUser.userRole.toLowerCase() as "manager" | "tenant"} />
+            )}
             <div className="flex-grow transition-all duration-300 ml-[--sidebar-width]">
               {children}
             </div>

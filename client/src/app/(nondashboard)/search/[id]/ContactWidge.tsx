@@ -1,3 +1,4 @@
+"use client";
 import { Button } from "@/components/ui/button";
 import { useGetAuthUserQuery } from "@/state/api";
 import { Phone } from "lucide-react";
